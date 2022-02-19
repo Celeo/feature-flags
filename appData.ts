@@ -22,13 +22,23 @@ export interface Flag {
   data: BooleanFlagData;
 }
 
+export type ApiAccessLevel = "read" | "write" | "admin";
+
 export interface ApiKey {
   key: string;
-  type: "read" | "write" | "admin";
+  accessLevel: ApiAccessLevel;
   enabled: boolean;
 }
 
-export async function loadAppData(): Promise<Array<Flag>> {
+export interface AppData {
+  flags: Array<Flag>;
+  apiKeys: Array<ApiKey>;
+}
+
+/**
+ * Load app data from the file system.
+ */
+export async function loadAppData(): Promise<AppData> {
   const data = await Deno.readFile(APP_DATA_FILE_NAME);
-  return JSON.parse(new TextDecoder(UTF_8).decode(data)) as Array<Flag>;
+  return JSON.parse(new TextDecoder(UTF_8).decode(data)) as AppData;
 }
