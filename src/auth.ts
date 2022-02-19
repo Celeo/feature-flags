@@ -18,12 +18,8 @@ export function extractAuthHeader(
 export function isAuthorized(
   keyInUse: string,
   requestedLevel: ApiAccessLevel,
-  adminApiKey: string,
   appData: AppData,
 ): boolean {
-  if (keyInUse === adminApiKey) {
-    return true;
-  }
   const matchingEntry = appData.apiKeys.find((entry) => entry.key === keyInUse);
   if (matchingEntry === undefined) {
     return false;

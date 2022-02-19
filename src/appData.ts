@@ -39,6 +39,6 @@ export interface AppData {
  * Load app data from the file system.
  */
 export async function loadAppData(): Promise<AppData> {
-  const data = await Deno.readFile(APP_DATA_FILE_NAME);
-  return JSON.parse(new TextDecoder(UTF_8).decode(data)) as AppData;
+  const text = await Deno.readFile(APP_DATA_FILE_NAME);
+  return JSON.parse(new TextDecoder(UTF_8).decode(text)) as AppData;
 }
