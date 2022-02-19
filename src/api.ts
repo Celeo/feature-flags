@@ -1,12 +1,29 @@
 import Ajv, { JSONSchemaType } from "https://esm.sh/ajv@8.10.0";
-import { ApiAccessLevel, AppData } from "./appData.ts";
+import { ApiAccessLevel, ApiKey, AppData, saveAppData } from "./appData.ts";
 import { extractAuthHeader, isAuthorized } from "./auth.ts";
 
 const AJV = new Ajv();
 type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 /**
+ * Data and function to receive and respond to an HTTP request.
+ */
+export interface ApiRoute<T> {
+  path: string;
+  method: HttpMethod;
+  dataShape?: JSONSchemaType<T>;
+  level: ApiAccessLevel;
+  execute: (
+    event: Deno.RequestEvent,
+    appData: AppData,
+    data: T,
+  ) => Promise<void>;
+}
+
+/**
  * Route the HTTP request.
+ *
+ * Handles path matching, method matching, and body schema checking.
  */
 export async function route(
   event: Deno.RequestEvent,
@@ -37,28 +54,49 @@ export async function route(
   }
   if (
     (method === "POST" || method === "PATCH") &&
-    matchingRoute.dataShape !== null
+    matchingRoute.dataShape !== undefined
   ) {
-    // TODO incoming data shape verification
+    const body = await event.request.text();
+    if (body.length === 0) {
+      await event.respondWith(
+        new Response(JSON.stringify({ message: "Missing request body" }), {
+          status: 400,
+        }),
+      );
+      return;
+    }
+    const validate = AJV.compile(matchingRoute.dataShape);
+    const bodyData = JSON.parse(body);
+    if (!validate(bodyData)) {
+      await event.respondWith(
+        new Response(
+          JSON.stringify({
+            message: "Invalid request body",
+            errors: validate.errors,
+          }),
+          { status: 400 },
+        ),
+      );
+      return;
+    }
+    await matchingRoute.execute(
+      event,
+      appData,
+      // @ts-ignore FIXME I don't know why this is complaining
+      bodyData,
+    );
+    return;
   }
-  await matchingRoute.execute(event, appData);
+  // @ts-ignore FIXME see above
+  await matchingRoute.execute(event, appData, null);
 }
 
-export interface ApiRoute {
-  path: string;
-  method: HttpMethod;
-  dataShape: JSONSchemaType<unknown> | null;
-  level: ApiAccessLevel;
-  execute: (
-    _event: Deno.RequestEvent,
-    _appData: AppData,
-  ) => Promise<void>;
-}
-
-const apiGetAllAuthKeys: ApiRoute = {
+/**
+ * List all auth keys.
+ */
+const apiGetAllAuthKeys: ApiRoute<null> = {
   path: "/admin/keys",
   method: "GET",
-  dataShape: null,
   level: "admin",
   execute: async (
     event: Deno.RequestEvent,
@@ -68,6 +106,35 @@ const apiGetAllAuthKeys: ApiRoute = {
   },
 };
 
+/**
+ * Add an auth key.
+ */
+const apiAddAuthKey: ApiRoute<ApiKey> = {
+  path: "/admin/keys",
+  method: "POST",
+  dataShape: {
+    type: "object",
+    properties: {
+      key: { type: "string" },
+      accessLevel: { type: "string", enum: ["admin", "write", "read"] },
+      enabled: { type: "boolean" },
+    },
+    required: ["key", "accessLevel", "enabled"],
+  },
+  level: "admin",
+  execute: async (
+    event: Deno.RequestEvent,
+    appData: AppData,
+    body: ApiKey,
+  ): Promise<void> => {
+    appData.apiKeys.push(body);
+    await saveAppData(appData);
+    await event.respondWith(
+      new Response(JSON.stringify({ message: "Api key added" })),
+    );
+  },
+};
+
 // more routes ...
 
-const ROUTES = [apiGetAllAuthKeys];
+const ROUTES = [apiGetAllAuthKeys, apiAddAuthKey];

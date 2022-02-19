@@ -39,6 +39,24 @@ export interface AppData {
  * Load app data from the file system.
  */
 export async function loadAppData(): Promise<AppData> {
+  try {
+    const stat = await Deno.lstat(APP_DATA_FILE_NAME);
+    if (!stat.isFile) {
+      console.log(`${APP_DATA_FILE_NAME} file not found`);
+      return { flags: [], apiKeys: [] };
+    }
+  } catch (_err) {
+    console.log(`Could not read from ${APP_DATA_FILE_NAME} file`);
+    return { flags: [], apiKeys: [] };
+  }
   const text = await Deno.readFile(APP_DATA_FILE_NAME);
   return JSON.parse(new TextDecoder(UTF_8).decode(text)) as AppData;
+}
+
+/**
+ * Save app data to the file system.
+ */
+export async function saveAppData(appData: AppData): Promise<void> {
+  const text = new TextEncoder().encode(JSON.stringify(appData, null, 2));
+  await Deno.writeFile(APP_DATA_FILE_NAME, text);
 }
