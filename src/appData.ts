@@ -8,7 +8,7 @@ export interface FlagPart<T> {
   appliesTo: Array<string>;
 }
 
-export interface BooleanFlagData {
+export interface FlagData {
   blue: FlagPart<boolean>;
   green: FlagPart<boolean>;
   default: "blue" | "green";
@@ -19,7 +19,7 @@ export interface Flag {
   name: string;
   description: string;
   enabled: boolean;
-  data: BooleanFlagData;
+  data: FlagData;
 }
 
 export type ApiAccessLevel = "read" | "write" | "admin";

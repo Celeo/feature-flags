@@ -1,5 +1,11 @@
 import Ajv, { JSONSchemaType } from "https://esm.sh/ajv@8.10.0";
-import { ApiAccessLevel, ApiKey, AppData, saveAppData } from "./appData.ts";
+import {
+  ApiAccessLevel,
+  ApiKey,
+  AppData,
+  FlagPart,
+  saveAppData,
+} from "./appData.ts";
 import { extractAuthHeader, isAuthorized } from "./auth.ts";
 
 const AJV = new Ajv();
@@ -132,7 +138,63 @@ const apiAddAuthKey: ApiRoute<ApiKey> = {
   },
 };
 
+// const apiViewAllFlags = { ... };
+// const apiAddFlag = { ... };
+
+const apiCheckFlag: ApiRoute<null> = {
+  path: "/flag",
+  method: "GET",
+  level: "read",
+  execute: async (
+    event: Deno.RequestEvent,
+    appData: AppData,
+  ): Promise<void> => {
+    const url = new URL(event.request.url);
+    const tag = url.searchParams.get("tag");
+    if (tag === null) {
+      await event.respondWith(
+        new Response(JSON.stringify({ message: "No tag supplied" }), {
+          status: 404,
+        }),
+      );
+      return;
+    }
+    const matchingFlag = appData.flags.find((flag) => flag.tag === tag);
+    if (matchingFlag === undefined) {
+      await event.respondWith(
+        new Response(
+          JSON.stringify({ message: "No flag supplied found", tag }),
+          { status: 404 },
+        ),
+      );
+      return;
+    }
+
+    const showFlag = async (d: FlagPart<unknown>) => {
+      const dCopy: Record<string, unknown> = { ...d };
+      delete dCopy["appliesTo"];
+      await event.respondWith(new Response(JSON.stringify(dCopy)));
+    };
+
+    const target = url.searchParams.get("target");
+    if (target === null) {
+      await showFlag(matchingFlag.data[matchingFlag.data.default]);
+      return;
+    }
+    const notDefaultFlag = matchingFlag
+      .data[matchingFlag.data.default === "green" ? "blue" : "green"];
+    if (notDefaultFlag.appliesTo.includes(target)) {
+      await showFlag(notDefaultFlag);
+    } else {
+      await showFlag(matchingFlag.data[matchingFlag.data.default]);
+    }
+  },
+};
+
 const ROUTES = [
   apiGetAllAuthKeys,
   apiAddAuthKey,
+  // apiViewAllFlags,
+  // apiAddFlag,
+  apiCheckFlag,
 ];
