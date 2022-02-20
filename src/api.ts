@@ -11,8 +11,8 @@ type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 export interface ApiRoute<T> {
   path: string;
   method: HttpMethod;
-  dataShape?: JSONSchemaType<T>;
   level: ApiAccessLevel;
+  dataShape?: JSONSchemaType<T>;
   execute: (
     event: Deno.RequestEvent,
     appData: AppData,
@@ -59,9 +59,10 @@ export async function route(
     const body = await event.request.text();
     if (body.length === 0) {
       await event.respondWith(
-        new Response(JSON.stringify({ message: "Missing request body" }), {
-          status: 400,
-        }),
+        new Response(
+          JSON.stringify({ message: "Missing request body" }),
+          { status: 400 },
+        ),
       );
       return;
     }
@@ -79,15 +80,11 @@ export async function route(
       );
       return;
     }
-    await matchingRoute.execute(
-      event,
-      appData,
-      // @ts-ignore FIXME I don't know why this is complaining
-      bodyData,
-    );
+    // @ts-ignore I cannot find out why T is 'never' here
+    await matchingRoute.execute(event, appData, bodyData);
     return;
   }
-  // @ts-ignore FIXME see above
+  // @ts-ignore I cannot find out why T is 'never' here
   await matchingRoute.execute(event, appData, null);
 }
 
@@ -112,6 +109,7 @@ const apiGetAllAuthKeys: ApiRoute<null> = {
 const apiAddAuthKey: ApiRoute<ApiKey> = {
   path: "/admin/keys",
   method: "POST",
+  level: "admin",
   dataShape: {
     type: "object",
     properties: {
@@ -121,7 +119,6 @@ const apiAddAuthKey: ApiRoute<ApiKey> = {
     },
     required: ["key", "accessLevel", "enabled"],
   },
-  level: "admin",
   execute: async (
     event: Deno.RequestEvent,
     appData: AppData,
@@ -135,6 +132,7 @@ const apiAddAuthKey: ApiRoute<ApiKey> = {
   },
 };
 
-// more routes ...
-
-const ROUTES = [apiGetAllAuthKeys, apiAddAuthKey];
+const ROUTES = [
+  apiGetAllAuthKeys,
+  apiAddAuthKey,
+];
