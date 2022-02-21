@@ -1,4 +1,5 @@
-import Ajv, { JSONSchemaType } from "https://esm.sh/ajv@8.10.0";
+import { Ajv, JSONSchemaType } from "./deps.ts";
+import { excludeKeys, sendResponse } from "./util.ts";
 import {
   ApiAccessLevel,
   ApiKey,
@@ -37,7 +38,7 @@ export async function route(
 ): Promise<void> {
   const authKey = extractAuthHeader(event);
   if (authKey === null) {
-    await event.respondWith(new Response(null, { status: 401 }));
+    await sendResponse(event, null, 401);
     return;
   }
   const path = new URL(event.request.url).pathname;
@@ -46,16 +47,11 @@ export async function route(
     route.path === path && route.method === method
   );
   if (matchingRoute === undefined) {
-    await event.respondWith(
-      new Response(
-        JSON.stringify({ message: "No route found", path, method }),
-        { status: 404 },
-      ),
-    );
+    await sendResponse(event, { message: "No route found", path, method }, 404);
     return;
   }
   if (!isAuthorized(authKey, matchingRoute.level, appData)) {
-    await event.respondWith(new Response(null, { status: 403 }));
+    await sendResponse(event, null, 403);
     return;
   }
   if (
@@ -64,26 +60,16 @@ export async function route(
   ) {
     const body = await event.request.text();
     if (body.length === 0) {
-      await event.respondWith(
-        new Response(
-          JSON.stringify({ message: "Missing request body" }),
-          { status: 400 },
-        ),
-      );
+      await sendResponse(event, { message: "Missing request body" }, 400);
       return;
     }
     const validate = AJV.compile(matchingRoute.dataShape);
     const bodyData = JSON.parse(body);
     if (!validate(bodyData)) {
-      await event.respondWith(
-        new Response(
-          JSON.stringify({
-            message: "Invalid request body",
-            errors: validate.errors,
-          }),
-          { status: 400 },
-        ),
-      );
+      await sendResponse(event, {
+        message: "Invalid request body",
+        errors: validate.errors,
+      }, 400);
       return;
     }
     // @ts-ignore I cannot find out why T is 'never' here
@@ -105,7 +91,7 @@ const apiGetAllAuthKeys: ApiRoute<null> = {
     event: Deno.RequestEvent,
     appData: AppData,
   ): Promise<void> => {
-    await event.respondWith(new Response(JSON.stringify(appData.apiKeys)));
+    await sendResponse(event, appData.apiKeys);
   },
 };
 
@@ -132,15 +118,13 @@ const apiAddAuthKey: ApiRoute<ApiKey> = {
   ): Promise<void> => {
     appData.apiKeys.push(body);
     await saveAppData(appData);
-    await event.respondWith(
-      new Response(JSON.stringify({ message: "Api key added" })),
-    );
+    await sendResponse(event, { message: "Api key added" });
   },
 };
 
-// const apiViewAllFlags = { ... };
-// const apiAddFlag = { ... };
-
+/**
+ * Get the value of a flag by tag and optional target.
+ */
 const apiCheckFlag: ApiRoute<null> = {
   path: "/flag",
   method: "GET",
@@ -152,29 +136,23 @@ const apiCheckFlag: ApiRoute<null> = {
     const url = new URL(event.request.url);
     const tag = url.searchParams.get("tag");
     if (tag === null) {
-      await event.respondWith(
-        new Response(JSON.stringify({ message: "No tag supplied" }), {
-          status: 404,
-        }),
-      );
+      await sendResponse(event, { message: "No tag supplied" }, 404);
       return;
     }
     const matchingFlag = appData.flags.find((flag) => flag.tag === tag);
     if (matchingFlag === undefined) {
-      await event.respondWith(
-        new Response(
-          JSON.stringify({ message: "No flag supplied found", tag }),
-          { status: 404 },
-        ),
+      await sendResponse(
+        event,
+        { message: "No flag supplied found", tag },
+        404,
       );
       return;
     }
 
-    const showFlag = async (d: FlagPart<unknown>) => {
-      const dCopy: Record<string, unknown> = { ...d };
-      delete dCopy["appliesTo"];
-      await event.respondWith(new Response(JSON.stringify(dCopy)));
-    };
+    async function showFlag(part: FlagPart<unknown>) {
+      const trimmed = excludeKeys({ ...part }, ["appliesTo"]);
+      await sendResponse(event, trimmed);
+    }
 
     const target = url.searchParams.get("target");
     if (target === null) {
