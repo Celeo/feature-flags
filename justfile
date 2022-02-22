@@ -7,14 +7,14 @@ defualt: run
 
 run:
     @deno run \
-        --allow-net=0.0.0.0 \
+        --allow-net=0.0.0.0:5000 \
         --allow-read={{read_files}} \
         --allow-write={{write_files}} \
         main.ts
 
 compile:
     @deno compile \
-        --allow-net=0.0.0.0 \
+        --allow-net=0.0.0.0:5000 \
         --allow-read={{read_files}} \
         --allow-write={{write_files}} \
         main.ts

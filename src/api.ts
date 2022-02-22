@@ -11,7 +11,7 @@ import { extractAuthHeader, isAuthorized } from "./auth.ts";
 import { schemaApiKey, schemaFlag } from "./schemas.ts";
 
 const AJV = new Ajv();
-type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+type HttpMethod = "GET" | "POST" | "DELETE";
 
 /**
  * Data and function to receive and respond to an HTTP request.
@@ -115,6 +115,31 @@ const apiAddAuthKey: ApiRoute<ApiKey> = {
   },
 };
 
+const apiRemoveAuthKey: ApiRoute<null> = {
+  path: "/admin/keys",
+  method: "DELETE",
+  level: "admin",
+  execute: async (
+    event: Deno.RequestEvent,
+    appData: AppData,
+  ): Promise<void> => {
+    const url = new URL(event.request.url);
+    const key = url.searchParams.get("key");
+    if (key === null) {
+      await sendResponse(event, { message: "No key specified" }, 404);
+      return;
+    }
+    const currentLength = appData.apiKeys.length;
+    appData.apiKeys = appData.apiKeys.filter((apiKey) => apiKey.key !== key);
+    if (appData.apiKeys.length === currentLength) {
+      await sendResponse(event, { message: "Key not found" }, 404);
+      return;
+    }
+    await saveAppData(appData);
+    await sendResponse(event, { message: "API key removed", key });
+  },
+};
+
 /**
  * View all flags.
  */
@@ -200,8 +225,8 @@ const apiAddFlag: ApiRoute<Flag> = {
 const ROUTES = [
   apiGetAllAuthKeys,
   apiAddAuthKey,
+  apiRemoveAuthKey,
   apiViewAllFlags,
   apiAddFlag,
   apiCheckFlag,
-  // apiUpdateFlag
 ];
