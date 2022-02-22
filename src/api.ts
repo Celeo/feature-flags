@@ -1,13 +1,14 @@
 import { Ajv, JSONSchemaType } from "./deps.ts";
-import { excludeKeys, sendResponse } from "./util.ts";
+import { sendResponse } from "./util.ts";
 import {
   ApiAccessLevel,
   ApiKey,
   AppData,
-  FlagPart,
+  Flag,
   saveAppData,
 } from "./appData.ts";
 import { extractAuthHeader, isAuthorized } from "./auth.ts";
+import { schemaApiKey, schemaFlag } from "./schemas.ts";
 
 const AJV = new Ajv();
 type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -102,15 +103,7 @@ const apiAddAuthKey: ApiRoute<ApiKey> = {
   path: "/admin/keys",
   method: "POST",
   level: "admin",
-  dataShape: {
-    type: "object",
-    properties: {
-      key: { type: "string" },
-      accessLevel: { type: "string", enum: ["admin", "write", "read"] },
-      enabled: { type: "boolean" },
-    },
-    required: ["key", "accessLevel", "enabled"],
-  },
+  dataShape: schemaApiKey,
   execute: async (
     event: Deno.RequestEvent,
     appData: AppData,
@@ -119,6 +112,21 @@ const apiAddAuthKey: ApiRoute<ApiKey> = {
     appData.apiKeys.push(body);
     await saveAppData(appData);
     await sendResponse(event, { message: "Api key added" });
+  },
+};
+
+/**
+ * View all flags.
+ */
+const apiViewAllFlags: ApiRoute<null> = {
+  path: "/flags",
+  method: "GET",
+  level: "read",
+  execute: async (
+    event: Deno.RequestEvent,
+    appData: AppData,
+  ): Promise<void> => {
+    await sendResponse(event, appData.flags);
   },
 };
 
@@ -149,30 +157,51 @@ const apiCheckFlag: ApiRoute<null> = {
       return;
     }
 
-    async function showFlag(part: FlagPart<unknown>) {
-      const trimmed = excludeKeys({ ...part }, ["appliesTo"]);
-      await sendResponse(event, trimmed);
-    }
-
     const target = url.searchParams.get("target");
     if (target === null) {
-      await showFlag(matchingFlag.data[matchingFlag.data.default]);
+      await sendResponse(
+        event,
+        matchingFlag.data[matchingFlag.data.default].value,
+      );
       return;
     }
     const notDefaultFlag = matchingFlag
       .data[matchingFlag.data.default === "green" ? "blue" : "green"];
     if (notDefaultFlag.appliesTo.includes(target)) {
-      await showFlag(notDefaultFlag);
+      await sendResponse(event, notDefaultFlag.value);
     } else {
-      await showFlag(matchingFlag.data[matchingFlag.data.default]);
+      await sendResponse(
+        event,
+        matchingFlag.data[matchingFlag.data.default].value,
+      );
     }
+  },
+};
+
+/**
+ * Add a new flag.
+ */
+const apiAddFlag: ApiRoute<Flag> = {
+  path: "/flags",
+  method: "POST",
+  level: "write",
+  dataShape: schemaFlag,
+  execute: async (
+    event: Deno.RequestEvent,
+    appData: AppData,
+    body: Flag,
+  ): Promise<void> => {
+    appData.flags.push(body);
+    await saveAppData(appData);
+    await sendResponse(event, { message: "Api key added" });
   },
 };
 
 const ROUTES = [
   apiGetAllAuthKeys,
   apiAddAuthKey,
-  // apiViewAllFlags,
-  // apiAddFlag,
+  apiViewAllFlags,
+  apiAddFlag,
   apiCheckFlag,
+  // apiUpdateFlag
 ];
